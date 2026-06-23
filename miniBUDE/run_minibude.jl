@@ -2,7 +2,7 @@
 
 function run_minibude(ppwi::Int)
     start_time = time()
-    cmd = `julia --project=. src/JACCBUDE.jl -p $ppwi --deck src/data/bm2`
+    cmd = `julia --project=. src/JACCBUDE.jl -p $ppwi --deck data/bm2`
     
     # Create a unique log file for each run
     log_file = "minibude_p$(ppwi).log"
