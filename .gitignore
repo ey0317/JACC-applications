@@ -1,0 +1,13 @@
+**/Manifest.toml
+**/LocalPreferences.toml
+**/core 
+
+# Mac OSX finder-related files
+.DS_Store
+
+# Visual Studio
+.vs/
+.vscode/
+
+# Jupyter Julia Kernel
+.ipynb_checkpoints/
