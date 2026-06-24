@@ -1,8 +1,8 @@
 #!/usr/bin/env julia
 
-function run_minibude(ppwi::Int)
+function run_minibude(ppwi::Int, wgsize::Int)
     start_time = time()
-    cmd = `julia --project=. src/JACCBUDE.jl -p $ppwi --deck data/bm1 -w 8`
+    cmd = `julia --project=. src/JACCBUDE.jl -p $ppwi --deck data/bm1 -w $wgsize`
     
     # Create a unique log file for each run
     log_file = "minibude_p$(ppwi).log"
@@ -37,6 +37,7 @@ function run_minibude(ppwi::Int)
 end
 
 function main()
+    wgsize = length(ARGS) > 0 ? parse(Int, ARGS[1]) : 64
     ppwi = [1, 2, 4, 8, 16, 32, 64, 128]
     
     # Create results directory if it doesn't exist
@@ -47,7 +48,7 @@ function main()
     
     for p in ppwi
         try
-            run_minibude(p)
+            run_minibude(p, wgsize)
             println("Completed run with $p ppwi")
 
 	    if isfile("minibude_p$p.log") 

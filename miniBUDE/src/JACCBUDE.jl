@@ -8,6 +8,7 @@
 import JACC
 JACC.@init_backend
 
+using CUDA
 using Test
 using StaticArrays
 using InteractiveUtils # To use @code_llvm
@@ -55,6 +56,7 @@ function run(params::Params, deck::Deck) #_::DeviceWithRepr)
   # warmup
   fasten_main(
     Val(convert(Int, params.ppwi)),
+    params, 
     protein,
     ligand,
     forcefield,
@@ -82,6 +84,7 @@ function run(params::Params, deck::Deck) #_::DeviceWithRepr)
 
 
 
+  CUDA.synchronize() 
 
   total_elapsed = 0.0
   for i = 1:params.iterations
@@ -89,12 +92,14 @@ function run(params::Params, deck::Deck) #_::DeviceWithRepr)
     begin
       fasten_main(
         Val(convert(Int, params.ppwi)),
+	params, 
         protein,
         ligand,
         forcefield,
         poses,
         etotals,
       )
+      CUDA.synchronize() 
     end
     end_time = time()
     iteration_elapsed = end_time - start_time
@@ -141,12 +146,13 @@ function run(params::Params, deck::Deck) #_::DeviceWithRepr)
   
   #(etotals, total_elapsed, params.wgsize)
   #(etotals_cpu, elapsed, params.wgsize)
-  (etotals_cpu, total_elapsed, params.ppwi)
+  (etotals_cpu, total_elapsed, params.wgsize)
 end
 
 
 @fastmath function fasten_main(
   ::Val{PPWI},
+  params::Params, 
   protein::AbstractArray{Atom},
   ligand::AbstractArray{Atom},
   forcefield::AbstractArray{FFParams},
@@ -162,7 +168,13 @@ end
   #print("total_work_items:", total_work_items)
   
 
-  function kernel(index)
+  function kernel() 
+    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x 
+
+    if index > total_work_items 
+        return 
+    end 
+
     # Get index of first TD (Thread Data)
     ix = (index - 1) * PPWI + 1 #calculates the starting pose index for each work item
     ix = ix <= nposes ? ix : nposes - PPWI #make sure we dont go out of bounds (not go past)
@@ -278,8 +290,15 @@ end
     end
   end #end for kernel function
 
-  JACC.parallel_for(total_work_items, kernel) # total_work_items determines how the pose indices are calculated
-  # example: if total_work_items is 25, then kernel(index) is called 25 times when doing JACC.parallel_for.
+  threads_per_block = convert(Int, params.wgsize) 
+  blocks_per_grid = ceil(Int, total_work_items / threads_per_block) 
+  
+  if JACC.backend == "cuda" 
+      @cuda threads=threads_per_block blocks=blocks_per_grid kernel() 
+  else 
+      JACC.parallel_for(total_work_items, idx -> kernel()) # total_work_items determines how the pose indices are calculated 
+      # example: if total_work_items is 25, then kernel(index) is called 25 times when doing JACC.parallel_for.
+  end 
 end
 
 main()
