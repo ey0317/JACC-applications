@@ -8,7 +8,12 @@
 import JACC
 JACC.@init_backend
 
-using CUDA
+if JACC.backend == "cuda" 
+    @eval using CUDA
+elseif JACC.backend == "amdgpu" 
+    @eval using AMDGPU 
+end 
+
 using Test
 using StaticArrays
 using InteractiveUtils # To use @code_llvm
@@ -83,8 +88,11 @@ function run(params::Params, deck::Deck) #_::DeviceWithRepr)
 
 
 
-
-  CUDA.synchronize() 
+  if JACC.backend == "cuda" 
+      CUDA.synchronize() 
+  elseif JACC.backend == "amdgpu" 
+      AMDGPU.synchronize() 
+  end 
 
   total_elapsed = 0.0
   for i = 1:params.iterations
@@ -99,8 +107,13 @@ function run(params::Params, deck::Deck) #_::DeviceWithRepr)
         poses,
         etotals,
       )
-      CUDA.synchronize() 
-    end
+
+  if JACC.backend == "cuda"
+      CUDA.synchronize()
+  elseif JACC.backend == "amdgpu"
+      AMDGPU.synchronize()
+  end
+end
     end_time = time()
     iteration_elapsed = end_time - start_time
     total_elapsed += iteration_elapsed
@@ -149,7 +162,6 @@ function run(params::Params, deck::Deck) #_::DeviceWithRepr)
   (etotals_cpu, total_elapsed, params.wgsize)
 end
 
-
 @fastmath function fasten_main(
   ::Val{PPWI},
   params::Params, 
@@ -166,14 +178,17 @@ end
   total_work_items::Int = ceil(Int, nposes / PPWI)
   #total_work_items = 1000
   #print("total_work_items:", total_work_items)
-  
 
-  function kernel() 
-    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x 
+  function kernel()
+    if JACC.backend == "cuda"
+        index = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+    elseif JACC.backend == "amdgpu"
+        index = (AMDGPU.blockIdx().x - 1) * AMDGPU.blockDim().x + AMDGPU.threadIdx().x
+    end
 
-    if index > total_work_items 
-        return 
-    end 
+    if index > total_work_items
+        return
+    end
 
     # Get index of first TD (Thread Data)
     ix = (index - 1) * PPWI + 1 #calculates the starting pose index for each work item
@@ -235,11 +250,11 @@ end
 
         radij::Float32 = p_params.radius + l_params.radius
         r_radij::Float32 = One / radij
-  
+
         elcdst::Float32 = (p_params.hbtype == HbtypeF && l_params.hbtype == HbtypeF) ? Four : Two
         elcdst1::Float32 = (p_params.hbtype == HbtypeF && l_params.hbtype == HbtypeF) ? Quarter : Half
         type_E::Bool = ((p_params.hbtype == HbtypeE || l_params.hbtype == HbtypeE))
-  
+
         phphb_ltz::Bool = p_params.hphb < Zero
         phphb_gtz::Bool = p_params.hphb > Zero
         phphb_nz::Bool = p_params.hphb != Zero
@@ -248,7 +263,7 @@ end
         distdslv::Float32 =
           (phphb_ltz ? (lhphb_ltz ? Npnpdist : Nppdist) : (lhphb_ltz ? Nppdist : -Float32Max))
         r_distdslv::Float32 = One / distdslv
-  
+
         chrg_init::Float32 = l_params.elsc * p_params.elsc
         dslv_init::Float32 = p_hphb + l_hphb
 
@@ -294,7 +309,19 @@ end
   blocks_per_grid = ceil(Int, total_work_items / threads_per_block) 
   
   if JACC.backend == "cuda" 
-      @cuda threads=threads_per_block blocks=blocks_per_grid kernel() 
+      Base.invokelatest() do
+          @eval CUDA.@cuda threads=$threads_per_block blocks=$blocks_per_grid $kernel()
+      end
+      CUDA.synchronize() 
+  elseif JACC.backend == "amdgpu" 
+      total_threads = blocks_per_grid * threads_per_block 
+      launch_expr = Expr(:macrocall, Symbol("@roc"), LineNumberNode(@__LINE__, @__FILE__),
+			 Expr(:(=), :groupsize, threads_per_block),
+			 Expr(:(=), :gridsize, total_threads),
+                         Expr(:call, kernel))
+
+      Core.eval(Main, launch_expr)
+      AMDGPU.synchronize() 
   else 
       JACC.parallel_for(total_work_items, idx -> kernel()) # total_work_items determines how the pose indices are calculated 
       # example: if total_work_items is 25, then kernel(index) is called 25 times when doing JACC.parallel_for.
