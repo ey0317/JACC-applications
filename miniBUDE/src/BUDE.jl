@@ -133,7 +133,7 @@ end
 
 function print_timings(params::Params, deck::Deck, elapsedSeconds::Float64, wgsize::UInt)
 
-  #print("wgsize: ", wgsize)
+  # print("wgsize: ", wgsize)
 
   # Average time per iteration
   averageIterationSeconds = elapsedSeconds / params.iterations
@@ -228,7 +228,7 @@ function main()
   println("Protein   : ", length(deck.protein))
   println("Forcefield: ", length(deck.forcefield))
   println("Deck      : ", params.deck)
-  #println("WGsize    : ", params.wgsize)
+  println("WGsize    : ", params.wgsize)
   println("PPWI      : ", params.ppwi)
 
   set_zero_subnormals(true)
