@@ -87,12 +87,7 @@ function run(params::Params, deck::Deck) #_::DeviceWithRepr)
   # end
 
 
-
-  if JACC.backend == "cuda" 
-      CUDA.synchronize() 
-  elseif JACC.backend == "amdgpu" 
-      AMDGPU.synchronize() 
-  end 
+  JACC.synchronize() 
 
   total_elapsed = 0.0
   for i = 1:params.iterations
@@ -107,12 +102,7 @@ function run(params::Params, deck::Deck) #_::DeviceWithRepr)
         poses,
         etotals,
       )
-
-  if JACC.backend == "cuda"
-      CUDA.synchronize()
-  elseif JACC.backend == "amdgpu"
-      AMDGPU.synchronize()
-  end
+      JACC.synchronize() 
 end
     end_time = time()
     iteration_elapsed = end_time - start_time
