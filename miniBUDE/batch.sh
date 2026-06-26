@@ -58,8 +58,8 @@ function main()
     end
 
     # Read clean values straight out of the native ARGS array
-    ppwi = parse(Int, ARGS[1])
-    wgsize = parse(Int, ARGS[2])
+    ppwi = parse(Int, ARGS[2])
+    wgsize = parse(Int, ARGS[1])
     num_iterations = 100
     
     mkpath("minibude_batchresults")
